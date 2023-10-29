@@ -6,8 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// gcc -o program program.c -DVERBOSE_FLAG
-#ifdef VERBOSE_FLAG
+#ifdef VERBOSE_FLAG  // gcc -o program program.c -DVERBOSE_FLAG
     #define DBG(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
     #define DBG(fmt, ...)
@@ -23,6 +22,20 @@ const size_t GRID_SIZE = sizeof(Sudoku_Grid) / sizeof(size_t);        // 81.
 void usage(char *prog) {
     fprintf(stderr, "Incorrect usage:\nInput file not provided");
     fprintf(stderr, "Usage:\n\t%s <input-file>\n", prog);
+}
+
+void init_arrayc(char *array, size_t size) {
+    memset(array, 0, sizeof(*array) * size);
+}
+void dbg_arrayc(char *array, size_t size, const char *fmt) {
+    size_t counter = 0;
+    for (size_t x = 0; x < size; x += 1) {
+        DBG(fmt, array[x]);
+        counter += 1;
+    }
+    DBG("\n");
+    DBG("array_len: %zu\n", counter);
+    DBG("\n");
 }
 
 void init_grid(size_t grid[ROW_SIZE][COL_SIZE]) {
@@ -44,21 +57,43 @@ void draw_sudoku_grid(size_t grid[ROW_SIZE][COL_SIZE]) {
         }
         printf("\n");
     }
-    DBG("\n");
+    printf("\n");
 }
 
-void init_arrayc(char *array, size_t size) {
-    memset(array, 0, sizeof(*array) * size);
-}
-void dbg_arrayc(char *array, size_t size, const char *fmt) {
-    size_t counter = 0;
-    for (size_t x = 0; x < size; x += 1) {
-        DBG(fmt, array[x]);
-        counter += 1;
+// Verifying that there are no duplicates in rows, columns, and 3x3 subgrids.
+bool is_valid(size_t board[ROW_SIZE][COL_SIZE], size_t idx_row, size_t idx_col,
+              size_t num) {
+    for (size_t i = 0; i < ROW_SIZE; i += 1) {  // num is not in row or column.
+        if (board[idx_row][i] == num || board[i][idx_col] == num) return false;
     }
-    DBG("\n");
-    DBG("array_len: %zu\n", counter);
-    DBG("\n");
+
+    size_t row_start = 3 * (idx_row / 3), col_start = 3 * (idx_col / 3);
+    for (size_t i = 0; i < 3; i += 1) {  // num is not in current subgrid.
+        for (size_t j = 0; j < 3; j += 1) {
+            if (board[row_start + i][col_start + j] == num) return false;
+        }
+    }
+
+    return true;
+}
+
+// Implement simple backtracking.
+bool solve_sudoku(size_t board[ROW_SIZE][COL_SIZE]) {
+    for (size_t x = 0; x < ROW_SIZE; x += 1) {
+        for (size_t y = 0; y < COL_SIZE; y += 1) {
+            if (board[x][y] == 0) {
+                for (size_t num = 1; num < 10; num += 1) {
+                    if (is_valid(board, x, y, num)) {
+                        board[x][y] = num;
+                        if (solve_sudoku(board)) { return true; }
+                        board[x][y] = 0;
+                    }
+                }
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 int main(int argc, char **argv) {
@@ -66,7 +101,6 @@ int main(int argc, char **argv) {
         usage(argv[0]);
         return 1;
     }
-
     DBG("%s %s\n", argv[0], argv[1]);
 
     assert(ROW_SIZE == 9 && COL_SIZE == ROW_SIZE &&
@@ -82,45 +116,45 @@ int main(int argc, char **argv) {
     const size_t buf_cap  = sizeof(buf) / sizeof(char);
     size_t       buf_size = 0;
 
-    {  // Populate 1D buffer.
-        assert(buf_cap == GRID_SIZE);
-        init_arrayc(buf, buf_cap);
+    assert(buf_cap == GRID_SIZE);
+    init_arrayc(buf, buf_cap);
 
-        char c;
-        while (((c = fgetc(Infile)) != EOF) && buf_size < GRID_SIZE) {
-            if (c >= '0' && c <= '9') {
-                buf[buf_size] = c - '0';  // Convert char to integer.
-                buf_size += 1;
-            }
-            DBG("%c", c);
+    // Populate 1D buffer.
+
+    char c;
+    while (((c = fgetc(Infile)) != EOF) && buf_size < GRID_SIZE) {
+        if (c >= '0' && c <= '9') {
+            buf[buf_size] = c - '0';  // Convert char to integer.
+            buf_size += 1;
         }
-        buf[GRID_SIZE] = '\0';
-        DBG("\n\n");
-
-        fclose(Infile);  // Close input file stream.
+        DBG("%c", c);
     }
+    buf[GRID_SIZE] = '\0';
+    DBG("\n\n");
 
-    {  // Populate 2D Sudoku_Grid from 1D buffer.
-        assert(buf_size == GRID_SIZE);
+    fclose(Infile);
 
-        size_t buf_index = 0;
-        for (size_t row = 0; row < ROW_SIZE; row += 1) {
-            for (size_t col = 0; col < COL_SIZE; col += 1) {
-                Sudoku_Grid[row][col] = buf[buf_index];
-                buf_index += 1;
-            }
+    // Populate 2D Sudoku_Grid from 1D buffer.
+
+    assert(buf_size == GRID_SIZE);
+
+    size_t buf_index = 0;
+    for (size_t row = 0; row < ROW_SIZE; row += 1) {
+        for (size_t col = 0; col < COL_SIZE; col += 1) {
+            Sudoku_Grid[row][col] = buf[buf_index];
+            buf_index += 1;
         }
-        assert(buf_index == GRID_SIZE);
-        dbg_grid(Sudoku_Grid);
     }
+    assert(buf_index == GRID_SIZE);
+    dbg_grid(Sudoku_Grid);
 
     DBG("Draw initial sudoku: \n");
     draw_sudoku_grid(Sudoku_Grid);
 
-    {
-        DBG("Draw solved sudoku:(todo!) \n");
-        draw_sudoku_grid(Sudoku_Grid);
-    }
+    solve_sudoku(Sudoku_Grid);
+
+    DBG("Draw solved sudoku:(todo!) \n");
+    draw_sudoku_grid(Sudoku_Grid);
 
     return 0;
 }
